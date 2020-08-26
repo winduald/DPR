@@ -1,0 +1,27 @@
+
+
+python dense_retriever.py --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --ctx_file  /checkpoint/xiaojianwu/DPR/data/wikipedia_split/psgs_w100.tsv --qa_file /checkpoint/xiaojianwu/DPR/data/retriever/qas/nq-test.csv --encoded_ctx_file "/checkpoint/xiaojianwu/DPR/data/encoded/nq/*" --out_file /checkpoint/xiaojianwu/DPR/data/test_results --n-docs 10 --save_or_load_index
+
+
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_bs_test.json
+
+
+python3 -m pdb train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_bs_test.json --output_dir /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/test --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256
+
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_bs_test.json --train_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_bs_train.json
+
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/semeval --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_bs_test.json
+
+
+ python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_train.json --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_test.json --checkpoint_file_name run_20 --num_train_epochs 8 --share_encoder --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/doc_share/run_0 --share_encoder --which_encoder_to_load c --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/doc_share/run_0 --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp
+
+
+
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_train.json --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --checkpoint_file_name run_20 --num_train_epochs 20 --share_encoder --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/bert_share/run_0
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_train.json --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_test.json --checkpoint_file_name run_20 --num_train_epochs 20 --share_encoder --which_encoder_to_load q --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/question_share/run_0 --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_train.json --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_test.json --checkpoint_file_name run_20 --num_train_epochs 20 --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/no_share/run_0 --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_train.json --dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_test.json --checkpoint_file_name run_20 --num_train_epochs 20 --share_encoder --which_encoder_to_load c --hard_negatives 30 --batch_size 2 --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/doc_share/run_0 --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp
+
+
+
+python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json --share_encoder --which_encoder_to_load c --hard_negatives 30 --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share/run_0/run_60_b3.99.79

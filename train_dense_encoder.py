@@ -17,6 +17,7 @@ import math
 import os
 import random
 import time
+from collections import OrderedDict
 
 
 import torch
@@ -26,7 +27,7 @@ from torch import nn
 from torch import Tensor as T
 
 from dpr.models import init_biencoder_components
-from dpr.models.biencoder import BiEncoder, BiEncoderNllLoss, BiEncoderBatch
+from dpr.models.biencoder import BiEncoder, BiEncoderNllLoss, BiEncoderBatch, BiEncoderEvalRerank
 from dpr.options import add_encoder_params, add_training_params, setup_args_gpu, set_seed, print_args, \
     get_encoder_params_state, add_tokenizer_params, set_encoder_params_from_state
 from dpr.utils.data_utils import ShardedDataIterator, read_data_from_json_files, Tensorizer
@@ -62,6 +63,7 @@ class BiEncoderTrainer(object):
         saved_state = None
         if model_file:
             saved_state = load_states_from_checkpoint(model_file)
+            saved_state = self.remapping_saved_model_dict(saved_state, args)
             set_encoder_params_from_state(saved_state.encoder_params, args)
 
         tensorizer, model, optimizer = init_biencoder_components(args.encoder_model_type, args)
@@ -83,12 +85,15 @@ class BiEncoderTrainer(object):
 
     def get_data_iterator(self, path: str, batch_size: int, shuffle=True,
                           shuffle_seed: int = 0,
-                          offset: int = 0, upsample_rates: list = None) -> ShardedDataIterator:
+                          offset: int = 0, upsample_rates: list = None,
+                          skip_non_pos_ctxs: bool = True) -> ShardedDataIterator:
         data_files = glob.glob(path)
         data = read_data_from_json_files(data_files, upsample_rates)
 
         # filter those without positive ctx
-        data = [r for r in data if len(r['positive_ctxs']) > 0]
+        if skip_non_pos_ctxs:
+            data = [r for r in data if len(r['positive_ctxs']) > 0]
+        
         logger.info('Total cleaned data size: {}'.format(len(data)))
 
         return ShardedDataIterator(data, shard_id=self.shard_id,
@@ -170,7 +175,6 @@ class BiEncoderTrainer(object):
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
-
             loss, correct_cnt = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, self.tensorizer, args)
             total_loss += loss.item()
             total_correct_predictions += correct_cnt
@@ -187,6 +191,34 @@ class BiEncoderTrainer(object):
                     correct_ratio
                     )
         return total_loss
+
+    def validate_reranking(self) -> float:
+        '''
+        '''
+        logger.info('calculate a list of reranking metrics ...')
+        args = self.args
+        self.biencoder.eval()
+        data_iterator = self.get_data_iterator(args.dev_file, args.dev_batch_size, shuffle=False, skip_non_pos_ctxs=False)
+
+        start_time = time.time()
+        # num_hard_negatives = args.hard_negatives
+        # num_other_negatives = args.other_negatives
+        log_result_step = args.log_batch_step
+        batches = 0
+        total_map_score, total_num_questions = 0, 0
+        for i, samples_batch in enumerate(data_iterator.iterate_data()):
+            biencoder_input = BiEncoder.create_biencoder_input_keep_all_positive(samples_batch, self.tensorizer,True)
+            map_score_sum, num_questions = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, \
+                                                                    self.tensorizer, args , method='rerank_eval')
+            total_map_score += map_score_sum
+            total_num_questions += num_questions
+            batches += 1
+            if (i + 1) % log_result_step == 0:
+                logger.info('Eval step: %d , used_time=%f sec.', i, time.time() - start_time)
+
+        map_score = total_map_score / float(total_num_questions)
+        logger.info('Map score is %f, number of questions %d', map_score, total_num_questions)
+        return map_score
 
     def validate_average_rank(self) -> float:
         """
@@ -246,10 +278,11 @@ class BiEncoderTrainer(object):
 
                 q_attn_mask = self.tensorizer.get_attn_mask(q_ids)
                 ctx_attn_mask = self.tensorizer.get_attn_mask(ctx_ids_batch)
+                # breakpoint()
                 with torch.no_grad():
-                    q_dense, ctx_dense = self.biencoder(q_ids, q_segments, q_attn_mask, ctx_ids_batch, ctx_seg_batch,
-                                                        ctx_attn_mask)
-
+                    q_dense, ctx_dense = self.biencoder(q_ids.to(args.device), q_segments.to(args.device), q_attn_mask.to(args.device), 
+                                                        ctx_ids_batch.to(args.device), ctx_seg_batch.to(args.device),
+                                                        ctx_attn_mask.to(args.device))
                 if q_dense is not None:
                     q_represenations.extend(q_dense.cpu().split(1, dim=0))
 
@@ -271,6 +304,7 @@ class BiEncoderTrainer(object):
         q_num = q_represenations.size(0)
         assert q_num == len(positive_idx_per_question)
 
+        # breakpoint()
         scores = sim_score_f(q_represenations, ctx_represenations)
         values, indices = torch.sort(scores, dim=1, descending=True)
 
@@ -383,6 +417,56 @@ class BiEncoderTrainer(object):
         logger.info('Saved checkpoint at %s', cp)
         return cp
 
+    def remapping_saved_model_dict(self, saved_state, args):
+        '''
+        this is used when two encoders are shared. Two options.
+        1. shared encoder uses pretrained document encoder
+        2. shared encoder uses pretrained question encoder
+        '''
+        model_dict = saved_state.model_dict
+        # breakpoint()
+        if args.share_encoder:
+            new_model_dict = OrderedDict()
+            for key in model_dict.keys():
+                if args.which_encoder_to_load == 'c':
+                    if 'ctx_model' in key:
+                        #both load ctx_model
+                        new_model_dict[key.replace('ctx_model', 'question_model')] = model_dict[key]
+                        new_model_dict[key] = model_dict[key]
+                    elif 'question_model' in key:
+                        #dont need
+                        continue
+                    else:
+                        raise Exception("key other than question_model or ctx_model is found")
+                
+                if args.which_encoder_to_load == 'q':
+                    if 'question_model' in key:
+                        #both load question_model
+                        new_model_dict[key.replace('question_model', 'ctx_model')] = model_dict[key]
+                        new_model_dict[key] = model_dict[key]
+                    elif 'ctx_model' in key:
+                        #dont need
+                        continue
+                    else:
+                        raise Exception("key other than question_model or ctx_model is found")
+            #copy a new saved state
+            new_saved_state = CheckpointState(model_dict=new_model_dict, 
+                                                optimizer_dict=saved_state.optimizer_dict, 
+                                                scheduler_dict=saved_state.scheduler_dict, 
+                                                offset=saved_state.offset, 
+                                                epoch=saved_state.epoch,
+                                                encoder_params=saved_state.encoder_params)
+
+            # print(new_saved_state.model_dict['question_model.encoder.layer.6.attention.output.dense.weight'])
+            # print(new_saved_state.model_dict['ctx_model.encoder.layer.6.attention.output.dense.weight'])
+            # print(saved_state.model_dict['ctx_model.encoder.layer.6.attention.output.dense.weight'])
+            # print(saved_state.model_dict['question_model.encoder.layer.6.attention.output.dense.weight'])
+            # exit(1)
+            # breakpoint()
+            return new_saved_state
+        else:
+            return saved_state
+
     def _load_saved_state(self, saved_state: CheckpointState):
         epoch = saved_state.epoch
         offset = saved_state.offset
@@ -397,6 +481,7 @@ class BiEncoderTrainer(object):
         logger.info('Loading saved model state ...')
         model_to_load.load_state_dict(saved_state.model_dict)  # set strict=False if you use extra projection
 
+        # breakpoint()
         if saved_state.optimizer_dict:
             logger.info('Loading saved optimizer state ...')
             self.optimizer.load_state_dict(saved_state.optimizer_dict)
@@ -460,8 +545,14 @@ def _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, local_pos
     return loss, is_correct
 
 
-def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: Tensorizer, args) -> (
+def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: Tensorizer, args, method: str = 'dpr') -> (
         torch.Tensor, int):
+    '''
+    type: dpr is the original
+    rerank_eval: is for evaluate reranking performance
+
+    Note: when method is different. the returned values are different
+    '''
     input = BiEncoderBatch(**move_to_device(input._asdict(), args.device))
 
     q_attn_mask = tensorizer.get_attn_mask(input.question_ids)
@@ -477,19 +568,34 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
 
     local_q_vector, local_ctx_vectors = model_out
 
-    loss_function = BiEncoderNllLoss()
+    if method == 'dpr':
+        loss_function = BiEncoderNllLoss()
 
-    loss, is_correct = _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, input.is_positive,
-                                  input.hard_negatives)
+        loss, is_correct = _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, input.is_positive,
+                                    input.hard_negatives)
 
-    is_correct = is_correct.sum().item()
+        is_correct = is_correct.sum().item()
 
-    if args.n_gpu > 1:
-        loss = loss.mean()
-    if args.gradient_accumulation_steps > 1:
-        loss = loss / args.gradient_accumulation_steps
+        if args.n_gpu > 1:
+            loss = loss.mean()
+        if args.gradient_accumulation_steps > 1:
+            loss = loss / args.gradient_accumulation_steps
 
-    return loss, is_correct
+        return loss, is_correct
+    elif method == 'rerank_eval':
+        loss_function = BiEncoderEvalRerank()
+
+        distributed_world_size = args.distributed_world_size or 1
+        assert distributed_world_size == 1, \
+            "currently rerank_eval doesn't support distdistributed_world_size > 1"
+        
+        map_score_sum, num_questions = loss_function.calc(local_q_vector, local_ctx_vectors, input.is_positive,
+                                          input.hard_negatives)
+
+        return map_score_sum, num_questions
+    else:
+        raise NotImplementedError
+        
 
 
 def main():
@@ -509,6 +615,12 @@ def main():
 
     parser.add_argument("--fix_ctx_encoder", action='store_true')
     parser.add_argument("--shuffle_positive_ctx", action='store_true')
+
+    #added options
+    parser.add_argument("--share_encoder", action='store_true', help='whether two encoders are shared')
+    parser.add_argument("--which_encoder_to_load", type=str, default='c', 
+                        help='when the encoder is shared, which encoder to load from pretrained open domain QA model.\
+                            there are only two options: q meaning question encoder, c meaning document encoder')
 
     # input/output src params
     parser.add_argument("--output_dir", default=None, type=str,
@@ -547,6 +659,7 @@ def main():
     setup_args_gpu(args)
     set_seed(args)
     print_args(args)
+    # breakpoint()
 
     trainer = BiEncoderTrainer(args)
 
@@ -554,7 +667,8 @@ def main():
         trainer.run_train()
     elif args.model_file and args.dev_file:
         logger.info("No train files are specified. Run 2 types of validation for specified model file")
-        trainer.validate_nll()
+        trainer.validate_reranking()
+        # trainer.validate_nll()
         trainer.validate_average_rank()
     else:
         logger.warning("Neither train_file or (model_file & dev_file) parameters are specified. Nothing to do.")

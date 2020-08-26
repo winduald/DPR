@@ -25,9 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 def get_roberta_biencoder_components(args, inference_only: bool = False, **kwargs):
-    question_encoder = RobertaEncoder.from_pretrained(args.pretrained_file)
-    ctx_encoder = RobertaEncoder.from_pretrained(args.pretrained_file)
-    biencoder = BiEncoder(question_encoder, ctx_encoder)
+
+    if args.share_encoder:
+        ctx_encoder = RobertaEncoder.from_pretrained(args.pretrained_file)
+        biencoder = BiEncoder(ctx_encoder, ctx_encoder)
+    else:
+        question_encoder = RobertaEncoder.from_pretrained(args.pretrained_file)
+        ctx_encoder = RobertaEncoder.from_pretrained(args.pretrained_file)
+        biencoder = BiEncoder(question_encoder, ctx_encoder)
     optimizer = get_fairseq_adamw_optimizer(biencoder, args) if not inference_only else None
 
     tensorizer = get_roberta_tensorizer(args)

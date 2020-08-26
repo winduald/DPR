@@ -29,10 +29,17 @@ logger = logging.getLogger(__name__)
 
 def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
     dropout = args.dropout if hasattr(args, 'dropout') else 0.0
-    question_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
-                                                  projection_dim=args.projection_dim, dropout=dropout, **kwargs)
-    ctx_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
-                                             projection_dim=args.projection_dim, dropout=dropout, **kwargs)
+
+    if args.share_encoder:
+        shared_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
+                                                    projection_dim=args.projection_dim, dropout=dropout, **kwargs)
+        question_encoder = shared_encoder
+        ctx_encoder = shared_encoder                                      
+    else:
+        question_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
+                                                    projection_dim=args.projection_dim, dropout=dropout, **kwargs)
+        ctx_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
+                                                projection_dim=args.projection_dim, dropout=dropout, **kwargs)
 
     fix_ctx_encoder = args.fix_ctx_encoder if hasattr(args, 'fix_ctx_encoder') else False
     biencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
@@ -141,17 +148,19 @@ class BertTensorizer(Tensorizer):
         self.max_length = max_length
         self.pad_to_max = pad_to_max
 
-    def text_to_tensor(self, text: str, title: str = None, add_special_tokens: bool = True):
+    def text_to_tensor(self, text: str, title: str = None, add_special_tokens: bool = True, truncation=True):
         text = text.strip()
 
         # tokenizer automatic padding is explicitly disabled since its inconsistent behavior
         if title:
             token_ids = self.tokenizer.encode(title, text_pair=text, add_special_tokens=add_special_tokens,
                                               max_length=self.max_length,
-                                              pad_to_max_length=False, truncation=True)
+                                              truncation=truncation,
+                                              pad_to_max_length=False)
         else:
             token_ids = self.tokenizer.encode(text, add_special_tokens=add_special_tokens, max_length=self.max_length,
-                                              pad_to_max_length=False, truncation=True)
+                                              truncation=truncation,
+                                              pad_to_max_length=False)
 
         seq_len = self.max_length
         if self.pad_to_max and len(token_ids) < seq_len:
