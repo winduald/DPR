@@ -136,6 +136,7 @@ class BiEncoderTrainer(object):
         if args.local_rank in [-1, 0]:
             logger.info('Training finished. Best validation checkpoint %s', self.best_cp_name)
 
+
     def validate_and_save(self, epoch: int, iteration: int, scheduler):
         args = self.args
         # for distributed mode, save checkpoint for only one process
@@ -595,8 +596,7 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
         return map_score_sum, num_questions
     else:
         raise NotImplementedError
-        
-
+    
 
 def main():
     parser = argparse.ArgumentParser()

@@ -1,17 +1,18 @@
-TASKS="semeval"
-# MODES="bert_share question_share no_share doc_share"
-MODES="doc_share"
-NUM_RUN=1
+TASKS="askubuntu"
+MODES="bert_share question_share no_share doc_share"
+# MODES="doc_share"
+NUM_RUN=2
 SRUN_PARAM="--gres gpu:volta:1 --nodes 1 --ntasks-per-node 1 --cpus-per-task 8 -C volta32gb --partition learnfair --time 4000 --mem-per-cpu 7G"
-NUM_EPOCH=60
+NUM_EPOCH=15
+NUM_HARD_NEG=10
 for TASK in $TASKS
 do
-    for ((run_id=0;run_id<NUM_RUN;run_id++))
+    for ((run_id=1;run_id<NUM_RUN;run_id++))
     do 
         for PREFIX in $MODES
         do
             # echo $PREFIX
-            FOLDER_NAME=/checkpoint/xiaojianwu/DPR/results/${TASK}/${PREFIX}/run_${run_id}
+            FOLDER_NAME=/checkpoint/xiaojianwu/DPR/results/${TASK}/${PREFIX}/run_${run_id}_numneg_${NUM_HARD_NEG}
             if [ ! -d $FOLDER_NAME ]
             then
                 mkdir $FOLDER_NAME
@@ -21,16 +22,16 @@ do
 
             if [ "$PREFIX" = "bert_share" ]
             then
-                OPTION="--share_encoder --hard_negatives 30 --batch_size 2 --output_dir ${FOLDER_NAME}"
+                OPTION="--share_encoder --hard_negatives ${NUM_HARD_NEG} --batch_size 2 --output_dir ${FOLDER_NAME}"
             elif [ "$PREFIX" = "question_share" ]
             then
-                OPTION="--share_encoder --which_encoder_to_load q --hard_negatives 30 --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
+                OPTION="--share_encoder --which_encoder_to_load q --hard_negatives ${NUM_HARD_NEG} --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
             elif [ "$PREFIX" = "no_share" ]
             then
-                OPTION="--hard_negatives 30 --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
+                OPTION="--hard_negatives ${NUM_HARD_NEG} --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
             elif [ "$PREFIX" = "doc_share" ]
             then
-                OPTION="--share_encoder --which_encoder_to_load c --hard_negatives 30 --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
+                OPTION="--share_encoder --which_encoder_to_load c --hard_negatives ${NUM_HARD_NEG} --batch_size 2 --output_dir ${FOLDER_NAME} --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp"
             fi
 
             if [[ ( "$PREFIX" == "bert_share") ]] || [[ ( "$PREFIX" == "no_share") ]] || [[ ( "$PREFIX" == "doc_share") ]]

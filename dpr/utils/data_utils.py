@@ -126,6 +126,38 @@ class ShardedDataIterator(object):
         # reset the iteration status
         self.iteration = 0
 
+    def iterate_data_rotate(self, epoch: int = 0) -> Iterator[List]:
+        '''when all data has been used, starting from the beginning'''
+        if self.shuffle:
+            # to be able to resume, same shuffling should be used when starting from a failed/stopped iteration
+            epoch_rnd = random.Random(self.shuffle_seed + epoch)
+            epoch_rnd.shuffle(self.data)
+
+        # if resuming iteration somewhere in the middle of epoch, one needs to adjust max_iterations
+
+        max_iterations = self.max_iterations - self.iteration
+
+        shard_samples = self.data[self.shard_start_idx:self.shard_end_idx]
+        while True:
+            for i in range(self.iteration * self.batch_size, len(shard_samples), self.batch_size):
+                items = shard_samples[i:i + self.batch_size]
+                if self.strict_batch_size and len(items) < self.batch_size:
+                    logger.debug('Extending batch to max size')
+                    items.extend(shard_samples[0:self.batch_size - len(items)])
+                self.iteration += 1
+                yield items
+
+        # some shards may done iterating while the others are at the last batch. Just return the first batch
+        # while self.iteration < max_iterations:
+        #     logger.debug('Fulfilling non complete shard='.format(self.shard_id))
+        #     self.iteration += 1
+        #     batch = shard_samples[0:self.batch_size]
+        #     yield batch
+
+        logger.debug('Finished iterating, iteration={}, shard={}'.format(self.iteration, self.shard_id))
+        # reset the iteration status
+        self.iteration = 0
+
     def get_iteration(self) -> int:
         return self.iteration
 

@@ -26,6 +26,30 @@ from .reader import Reader
 
 logger = logging.getLogger(__name__)
 
+def get_bert_triangle_components(args, inference_only: bool = False, **kwargs):
+    '''This methold will create two encoders: question, answers.
+    It will return three BiEncoder objects for question-question similarity,  question-answer, answer-answer similarity
+    '''
+    if args.share_encoder:
+        raise Exception("triangle no need to share encoder")
+
+    question_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
+                                                    projection_dim=args.projection_dim, dropout=dropout, **kwargs)
+    ctx_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
+                                                projection_dim=args.projection_dim, dropout=dropout, **kwargs)
+    fix_ctx_encoder = args.fix_ctx_encoder if hasattr(args, 'fix_ctx_encoder') else False
+
+    qqbiencoder = BiEncoder(question_encoder, question_encoders)
+    qabiencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
+    aabiencoder = BiEncoder(ctx_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
+    optimizer = get_optimizer(biencoder,
+                              learning_rate=args.learning_rate,
+                              adam_eps=args.adam_eps, weight_decay=args.weight_decay,
+                              ) if not inference_only else None
+
+    tensorizer = get_bert_tensorizer(args)
+
+    return tensorizer, qqbiencoder, qabiencoder, aabiencoder, optimizer
 
 def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
     dropout = args.dropout if hasattr(args, 'dropout') else 0.0

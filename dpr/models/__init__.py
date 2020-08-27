@@ -11,7 +11,6 @@ import importlib
  'Router'-like set of methods for component initialization with lazy imports 
 """
 
-
 def init_hf_bert_biencoder(args, **kwargs):
     if importlib.util.find_spec("transformers") is None:
         raise RuntimeError('Please install transformers lib')
@@ -53,7 +52,6 @@ def init_hf_roberta_tenzorizer(args, **kwargs):
     from .hf_models import get_roberta_tensorizer
     return get_roberta_tensorizer(args)
 
-
 BIENCODER_INITIALIZERS = {
     'hf_bert': init_hf_bert_biencoder,
     'pytext_bert': init_pytext_bert_biencoder,
@@ -89,3 +87,17 @@ def init_reader_components(encoder_type: str, args, **kwargs):
 
 def init_tenzorizer(encoder_type: str, args, **kwargs):
     return init_comp(TENSORIZER_INITIALIZERS, encoder_type, args, **kwargs)
+
+#added for multi-task learning
+def init_hf_bert_triangle_encoder(args, **kwargs):
+    if importlib.util.find_spec("transformers") is None:
+        raise RuntimeError('Please install transformers lib')
+    from .hf_models import get_bert_triangle_components
+    return get_bert_triangle_components(args, **kwargs)
+
+TRIANGLE_ENCODER_INITIALIZERS = {
+    'hf_bert': init_hf_bert_triangle_encoder,
+}
+
+def init_triangle_encoder_components(encoder_type: str, args, **kwargs):
+    return init_comp(TRIANGLE_ENCODER_INITIALIZERS, encoder_type, args, **kwargs)
