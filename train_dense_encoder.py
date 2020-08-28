@@ -72,6 +72,7 @@ class BiEncoderTrainer(object):
                                                       args.local_rank,
                                                       args.fp16,
                                                       args.fp16_opt_level)
+        breakpoint()
         self.biencoder = model
         self.optimizer = optimizer
         self.tensorizer = tensorizer
@@ -173,6 +174,7 @@ class BiEncoderTrainer(object):
         log_result_step = args.log_batch_step
         batches = 0
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
+            breakpoint()
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
@@ -554,6 +556,7 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
 
     Note: when method is different. the returned values are different
     '''
+    breakpoint()
     input = BiEncoderBatch(**move_to_device(input._asdict(), args.device))
 
     q_attn_mask = tensorizer.get_attn_mask(input.question_ids)

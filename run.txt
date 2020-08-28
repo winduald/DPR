@@ -25,3 +25,9 @@ python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cf
 
 
 python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json --share_encoder --which_encoder_to_load c --hard_negatives 30 --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share/run_0/run_60_b3.99.79
+
+
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json
+
+
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json

@@ -30,6 +30,7 @@ def get_bert_triangle_components(args, inference_only: bool = False, **kwargs):
     '''This methold will create two encoders: question, answers.
     It will return three BiEncoder objects for question-question similarity,  question-answer, answer-answer similarity
     '''
+    dropout = args.dropout if hasattr(args, 'dropout') else 0.0
     if args.share_encoder:
         raise Exception("triangle no need to share encoder")
 
@@ -39,10 +40,12 @@ def get_bert_triangle_components(args, inference_only: bool = False, **kwargs):
                                                 projection_dim=args.projection_dim, dropout=dropout, **kwargs)
     fix_ctx_encoder = args.fix_ctx_encoder if hasattr(args, 'fix_ctx_encoder') else False
 
-    qqbiencoder = BiEncoder(question_encoder, question_encoders)
+    qqbiencoder = BiEncoder(question_encoder, question_encoder)
     qabiencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
     aabiencoder = BiEncoder(ctx_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
-    optimizer = get_optimizer(biencoder,
+    
+    #here Qa model contains all parameters
+    optimizer = get_optimizer(qabiencoder,
                               learning_rate=args.learning_rate,
                               adam_eps=args.adam_eps, weight_decay=args.weight_decay,
                               ) if not inference_only else None
@@ -67,6 +70,8 @@ def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
 
     fix_ctx_encoder = args.fix_ctx_encoder if hasattr(args, 'fix_ctx_encoder') else False
     biencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
+
+    breakpoint()
 
     optimizer = get_optimizer(biencoder,
                               learning_rate=args.learning_rate,
@@ -116,9 +121,9 @@ def get_optimizer(model: nn.Module, learning_rate: float = 1e-5, adam_eps: float
          'weight_decay': weight_decay},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate, eps=adam_eps)
     return optimizer
-
 
 def get_bert_tokenizer(pretrained_cfg_name: str, do_lower_case: bool = True):
     return BertTokenizer.from_pretrained(pretrained_cfg_name, do_lower_case=do_lower_case)

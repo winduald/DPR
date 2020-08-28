@@ -139,7 +139,6 @@ def setup_args_gpu(args):
     """
      Setup arguments CUDA, GPU & distributed training
     """
-
     if args.local_rank == -1 or args.no_cuda:  # single-node multi-gpu (or cpu) mode
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = torch.cuda.device_count()

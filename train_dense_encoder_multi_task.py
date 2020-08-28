@@ -14,14 +14,26 @@ from typing import Tuple
 from torch import nn
 from torch import Tensor as T
 
-from dpr.models import init_biencoder_components
-from dpr.models.biencoder import BiEncoder, BiEncoderNllLoss, BiEncoderBatch, BiEncoderEvalRerank
+from dpr.models import init_triangle_encoder_components
+# from dpr.models.biencoder import BiEncoder, BiEncoderNllLoss, BiEncoderBatch, BiEncoderEvalRerank
 from dpr.options import add_encoder_params, add_training_params, setup_args_gpu, set_seed, print_args, \
     get_encoder_params_state, add_tokenizer_params, set_encoder_params_from_state
-from dpr.utils.data_utils import ShardedDataIterator, read_data_from_json_files, Tensorizer
-from dpr.utils.dist_utils import all_gather_list
-from dpr.utils.model_utils import setup_for_distributed_mode, move_to_device, get_schedule_linear, CheckpointState, \
-    get_model_file, get_model_obj, load_states_from_checkpoint
+from dpr.utils.data_utils import ShardedDataIterator
+# from dpr.utils.dist_utils import all_gather_list
+# from dpr.utils.model_utils import setup_for_distributed_mode, move_to_device, get_schedule_linear, CheckpointState, \
+#     get_model_file, get_model_obj, load_states_from_checkpoint
+from dpr.utils.model_utils import get_model_file, load_states_from_checkpoint, setup_for_distributed_mode
+
+from train_dense_encoder import BiEncoderTrainer, logger
+
+class TriangleEncoder(nn.Module):
+
+    def __init__(self, qqmodel: nn.Module, qamodel: nn.Module, aamodel: nn.Module):
+        self.qqmodel = qqmodel
+        self.qamodel = qamodel
+        self.aamodel = aamodel
+
+
 
 class BiEncoderTrainerMultiTask(BiEncoderTrainer):
 
@@ -35,6 +47,7 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         # if model file is specified, encoder parameters from saved state should be used for initialization
         model_file = get_model_file(self.args, self.args.checkpoint_file_name)
         saved_state = None
+        breakpoint()
         if model_file:
             saved_state = load_states_from_checkpoint(model_file)
             saved_state = self.remapping_saved_model_dict(saved_state, args)
@@ -42,11 +55,14 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
 
         tensorizer, qqmodel, qamodel, aamodel, optimizer = init_triangle_encoder_components(args.encoder_model_type, args)
 
+        triangle_encoder = TriangleEncoder(qqmodel, qamodel, aamodel)
         #currently diable distributed training ????
-        # model, optimizer = setup_for_distributed_mode(model, optimizer, args.device, args.n_gpu,
-        #                                               args.local_rank,
-        #                                               args.fp16,
-        #                                               args.fp16_opt_level)
+        triangle_encoder, optimizer = setup_for_distributed_mode(triangle_encoder, optimizer, args.device, args.n_gpu,
+                                                      args.local_rank,
+                                                      args.fp16,
+                                                     args.fp16_opt_level)
+        
+        
         self.qqbiencoder = qqmodel
         self.qabiencoder = qamodel
         self.aabiencoder = aamodel
@@ -58,7 +74,9 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         self.best_validation_result = None
         self.best_cp_name = None
         if saved_state:
+            self.biencoder = qamodel 
             self._load_saved_state(saved_state)
+            self.biencoder = None 
 
 
     def run_train(self, ):
@@ -126,16 +144,20 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         while True:
             if qqs_batch_gen:
                 for j in range(multi_task_scheduler['qqs']):
-                    yield next(qqs_batch_gen), 'qqs'
+                    yield next(qqs_batch_gen), 'qqs', qqs_train_data_iterator
             if aas_batch_gen:
                 for j in range(multi_task_scheduler['aas']):
-                    yield next(aas_batch_gen), 'aas'
+                    yield next(aas_batch_gen), 'aas', aas_train_data_iterator
             if qa_batch_gen:
                 for j in range(multi_task_scheduler['qa']):
-                    yield next(qa_batch_gen), 'qa'
+                    yield next(qa_batch_gen), 'qa', qa_train_data_iterator
 
         
-    
+    def zero_grad():
+        #make grad to be zero
+        #qa biencode contains all parameters
+        self.qabiencoder.zero_grad()
+
 
     def _train_epoch(self, scheduler, epoch: int, eval_step: int,
                      qqs_train_data_iterator: ShardedDataIterator,
@@ -171,36 +193,35 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         #we will track three losses
         qq_epoch_loss, aa_epoch_loss, qa_epoch_loss = 0, 0, 0
         qq_epoch_correct_predictions, aa_epoch_correct_predictions, qa_epoch_correct_predictions = 0, 0, 0
+        qq_rolling_train_loss, aa_rolling_train_loss, qa_rolling_train_loss = 0.0, 0.0, 0.0
+        qq_i, aa_i, qa_i = 0, 0, 0
+
         for i in range(num_iteration_per_epoch):
-            samples_batch, task_name = next(batch_gen)
+            samples_batch, task_name, train_data_iterator = next(batch_gen)
         # for i, samples_batch in enumerate(train_data_iterator.iterate_data_rotate(epoch=epoch)):
             # to be able to resume shuffled ctx- pools
             # data_iteration = train_data_iterator.get_iteration()
             # random.seed(seed + epoch + data_iteration)
-            random.seed(seed + epoch + i)
+
+            if task_name == 'qqs':
+                cur_biencoder, epoch_loss, epoch_correct_predictions, rolling_train_loss, it = \
+                    self.qqbiencoder, qq_epoch_loss, qq_epoch_correct_predictions, qq_rolling_train_loss, qq_i
+            elif task_name == 'aas':
+                cur_biencoder, epoch_loss, epoch_correct_predictions, rolling_train_loss, it = \
+                    self.aabiencoder, aa_epoch_loss, aa_epoch_correct_predictions, aa_rolling_train_loss, aa_i
+            elif task_name == 'qa':
+                cur_biencoder, epoch_loss, epoch_correct_predictions, rolling_train_loss, it = \
+                    self.qabiencoder, qa_epoch_loss, qa_epoch_correct_predictions, qa_rolling_train_loss, qa_i
+            
+            data_iteration = train_data_iterator.get_iteration()
+            random.seed(seed + epoch + data_iteration)
             biencoder_batch = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
                                                                num_hard_negatives, num_other_negatives, shuffle=True,
                                                                shuffle_positives=args.shuffle_positive_ctx
                                                                )
-            
-            if task_name == 'qqs':
-                biencoder = self.qqbiencoder
-                epoch_loss = qq_epoch_loss
-                epoch_correct_predictions = qq_epoch_correct_predictions
-                # loss, correct_cnt = _do_biencoder_fwd_pass(self.qqbiencoder, biencoder_batch, self.tensorizer, args)
-                # qq_epoch_loss += loss.item()
-                # qq_epoch_correct_predictions += correct_cnt
-            elif task_name == 'aas':
-                loss, correct_cnt = _do_biencoder_fwd_pass(self.aabiencoder, biencoder_batch, self.tensorizer, args)
-                aa_epoch_loss += loss.item()
-                aa_epoch_correct_predictions += correct_cnt
-            elif task_name == 'qa':
-                loss, correct_cnt = _do_biencoder_fwd_pass(self.qabiencoder, biencoder_batch, self.tensorizer, args)
-                qa_epoch_loss += loss.item()
-                qa_epoch_correct_predictions += correct_cnt
 
-            loss, correct_cnt = _do_biencoder_fwd_pass(biencoder, biencoder_batch, self.tensorizer, args)
+            loss, correct_cnt = _do_biencoder_fwd_pass(cur_biencoder, biencoder_batch, self.tensorizer, args)
             epoch_correct_predictions += correct_cnt
             epoch_loss += loss.item()
             rolling_train_loss += loss.item()
@@ -214,36 +235,91 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
             else:
                 loss.backward()
                 if args.max_grad_norm > 0:
-                    torch.nn.utils.clip_grad_norm_(self.biencoder.parameters(), args.max_grad_norm)
+                    #clip biencoder
+                    torch.nn.utils.clip_grad_norm_(self.qabiencoder.parameters(), args.max_grad_norm)
 
             if (i + 1) % args.gradient_accumulation_steps == 0:
+                #this update will consider all tasks. So, each task will accumulate gradients.
+                #here all accumulated gradients will be updated
                 self.optimizer.step()
                 scheduler.step()
-                self.biencoder.zero_grad()
+                self.qabiencoder.zero_grad()
 
             if i % log_result_step == 0:
                 lr = self.optimizer.param_groups[0]['lr']
                 logger.info(
-                    'Epoch: %d: Step: %d/%d, loss=%f, lr=%f', epoch, data_iteration, epoch_batches, loss.item(), lr)
+                    'Epoch: %d: Step: %d/%d, task=%s, loss=%f, lr=%f', epoch, i, epoch_batches, task_name ,loss.item(), lr)
 
-            if (i + 1) % rolling_loss_step == 0:
+            #report average loss of all tasks
+            if (it + 1) % rolling_loss_step == 0:
+            # if (i + 1) % rolling_loss_step == 0:
                 logger.info('Train batch %d', data_iteration)
                 latest_rolling_train_av_loss = rolling_train_loss / rolling_loss_step
-                logger.info('Avg. loss per last %d batches: %f', rolling_loss_step, latest_rolling_train_av_loss)
+                logger.info('Task: %s  Avg. loss per last %d batches: %f', task_name, rolling_loss_step, latest_rolling_train_av_loss)
                 rolling_train_loss = 0.0
 
-            if data_iteration % eval_step == 0:
-                logger.info('Validation: Epoch: %d Step: %d/%d', epoch, data_iteration, epoch_batches)
-                self.validate_and_save(epoch, train_data_iterator.get_iteration(), scheduler)
-                self.biencoder.train()
+            #no need to dev?
+            # if (it + 1) % eval_step == 0:
+            #     logger.info('Validation: Epoch: %d Step: %d/%d', epoch, data_iteration, epoch_batches)
+            #     self.validate_and_save(epoch, train_data_iterator.get_iteration(), scheduler)
+            #     biencoder.train()
+            #iteration add 1
+            it += 1
 
-        self.validate_and_save(epoch, data_iteration, scheduler)
+        self.validate_and_save_by_task(epoch, data_iteration, 'qqs', scheduler)
 
-        epoch_loss = (epoch_loss / epoch_batches) if epoch_batches > 0 else 0
-        logger.info('Av Loss per epoch=%f', epoch_loss)
-        logger.info('epoch total correct predictions=%d', epoch_correct_predictions)
+        # epoch_loss = (epoch_loss / epoch_batches) if epoch_batches > 0 else 0
+        qq_epoch_loss = (qq_epoch_loss / qq_i) if qq_i > 0 else 0
+        aa_epoch_loss = (aa_epoch_loss / aa_i) if aa_i > 0 else 0
+        qa_epoch_loss = (qa_epoch_loss / qa_i) if qa_i > 0 else 0
+        logger.info('Av Loss per epoch by tasks.  qqs %f, aas %f, qa %f', qq_epoch_loss, aa_epoch_loss, qa_epoch_loss)
+        logger.info('epoch total correct predictions. qqs %d, aas %d, qa %d', \
+            qq_epoch_correct_predictions, aa_epoch_correct_predictions, qa_epoch_correct_predictions)
+
+    def set_biencoder_and_dev_file_by_task(self, task_name):
+        if task_name == 'qqs':
+            self.biencoder = self.qabiencoder
+            self.args.dev_file = self.args.question_sim_dev_file
+        elif task_name == 'aas':
+            self.biencoder = self.aabiencoder
+            self.args.dev_file = self.args.answer_sim_dev_file
+        elif task_name == 'qa':
+            self.biencoder = self.qabiencoder
+            self.args.dev_file = self.args.qa_dev_file
+        else:
+            raise NotImplementedError
+    
+    def clear_biencoder_and_dev_file(self):
+        #for code safety
+        self.biencoder = None
+        self.args.dev_file = None
+
+    def validate_and_save_by_task(self, epoch: int, iteration: int, task_name: str, scheduler):
+
+        self.set_biencoder_and_dev_file_by_task(task_name)
+        self.validate_and_save(epoch, iteration, scheduler) 
+        self.clear_biencoder_and_dev_file()
 
 
+    def validate_average_rank_by_task(self, task_name: str):
+        '''the only inputs to this function is dev_file and biencoder'''
+
+        self.set_biencoder_and_dev_file_by_task(task_name)
+        self.validate_average_rank()
+        self.clear_biencoder_and_dev_file()
+
+    def validate_reranking_by_task(self, task_name: str) -> float:
+
+        self.set_biencoder_and_dev_file_by_task(task_name)
+        self.validate_reranking()
+        self.clear_biencoder_and_dev_file()
+
+    def validate_nll_by_task(self, task_name: str) -> float:
+        self.set_biencoder_and_dev_file_by_task(task_name)
+        self.validate_nll()
+        self.clear_biencoder_and_dev_file()        
+
+        
 
 def main():
     parser = argparse.ArgumentParser()
@@ -337,14 +413,13 @@ def main():
     # breakpoint()
 
     trainer = BiEncoderTrainerMultiTask(args)
-
-    if args.train_file is not None:
+    if args.question_sim_train_file is not None or args.answer_sim_train_file is not None or args.qa_train_file is not None:
         trainer.run_train()
-    elif args.model_file and args.dev_file:
+    elif args.model_file and (args.question_sim_dev_file or args.answer_sim_dev_file or args.qa_dev_file):
         logger.info("No train files are specified. Run 2 types of validation for specified model file")
-        trainer.validate_reranking()
-        # trainer.validate_nll()
-        trainer.validate_average_rank()
+        # trainer.validate_reranking_by_task('qqs')
+        trainer.validate_nll_by_task('qqs')
+        trainer.validate_average_rank_by_task('qqs')
     else:
         logger.warning("Neither train_file or (model_file & dev_file) parameters are specified. Nothing to do.")
 
