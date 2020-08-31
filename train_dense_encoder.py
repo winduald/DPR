@@ -152,7 +152,8 @@ class BiEncoderTrainer(object):
             validation_loss = self.validate_nll()
 
         if save_cp:
-            cp_name = self._save_checkpoint(scheduler, epoch, iteration)
+            # cp_name = self._save_checkpoint(scheduler, epoch, iteration)
+            cp_name = self._save_checkpoint_only_model(scheduler, epoch, iteration)
             logger.info('Saved checkpoint to %s', cp_name)
 
             if validation_loss < (self.best_validation_result or validation_loss + 1):
@@ -165,7 +166,6 @@ class BiEncoderTrainer(object):
         args = self.args
         self.biencoder.eval()
         data_iterator = self.get_data_iterator(args.dev_file, args.dev_batch_size, shuffle=False)
-
         total_loss = 0.0
         start_time = time.time()
         total_correct_predictions = 0
@@ -174,7 +174,7 @@ class BiEncoderTrainer(object):
         log_result_step = args.log_batch_step
         batches = 0
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
-            breakpoint()
+            # breakpoint()
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
@@ -420,6 +420,24 @@ class BiEncoderTrainer(object):
         logger.info('Saved checkpoint at %s', cp)
         return cp
 
+    def _save_checkpoint_only_model(self, scheduler, epoch: int, offset: int) -> str:
+        args = self.args
+        model_to_save = get_model_obj(self.biencoder)
+        cp = os.path.join(args.output_dir,
+                          args.checkpoint_file_name + '.' + str(epoch) + ('.' + str(offset) if offset > 0 else ''))
+
+        meta_params = get_encoder_params_state(args)
+
+        state = CheckpointState(model_to_save.state_dict(),
+                                None,
+                                None,
+                                0,
+                                0, meta_params
+                                )
+        torch.save(state._asdict(), cp)
+        logger.info('Saved checkpoint at %s', cp)
+        return cp
+
     def remapping_saved_model_dict(self, saved_state, args):
         '''
         this is used when two encoders are shared. Two options.
@@ -556,9 +574,7 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
 
     Note: when method is different. the returned values are different
     '''
-    breakpoint()
     input = BiEncoderBatch(**move_to_device(input._asdict(), args.device))
-
     q_attn_mask = tensorizer.get_attn_mask(input.question_ids)
     ctx_attn_mask = tensorizer.get_attn_mask(input.context_ids)
 

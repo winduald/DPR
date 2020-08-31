@@ -27,7 +27,25 @@ python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cf
 python train_dense_encoder.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json --share_encoder --which_encoder_to_load c --hard_negatives 30 --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/doc_share/run_0/run_60_b3.99.79
 
 
+
 python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json
 
 
 python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/askubuntu/dpr/askubuntu_q1bs_q2bs_test.json
+
+
+#eval
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_test.json --answer_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json
+
+#train
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu --model_file /checkpoint/xiaojianwu/DPR/checkpoint/retriever/single/nq/bert-base-encoder.cp --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_test.json --answer_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_train_file 
+
+
+#train qa
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu/qa --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/qa/dpr_biencoder.7.2138 --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_test.json --answer_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_merged.json --num_train_epochs 8
+
+#eval qa
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/askubuntu/qa --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_test.json --answer_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/qa/dpr_biencoder.9.2138
+
+#qqs with qa pretrained
+python train_dense_encoder_multi_task.py --encoder_model_type hf_bert --pretrained_model_cfg bert-base-uncased --output_dir /checkpoint/xiaojianwu/DPR/results/semeval/qa_pretrained_qqs --sequence_length 256 --question_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --qa_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_qa_q1bs_test.json --answer_sim_dev_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1bs_q2bs_test.json --model_file /checkpoint/xiaojianwu/DPR/results/askubuntu/qa/dpr_biencoder.9.2138 --question_sim_train_file /checkpoint/xiaojianwu/data/semeval/dpr/semeval_q1s_q2s_train.json --num_train_epochs 10

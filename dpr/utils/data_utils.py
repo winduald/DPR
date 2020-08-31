@@ -134,12 +134,12 @@ class ShardedDataIterator(object):
             epoch_rnd.shuffle(self.data)
 
         # if resuming iteration somewhere in the middle of epoch, one needs to adjust max_iterations
-
+        self.iteration = 0
         max_iterations = self.max_iterations - self.iteration
 
         shard_samples = self.data[self.shard_start_idx:self.shard_end_idx]
         while True:
-            for i in range(self.iteration * self.batch_size, len(shard_samples), self.batch_size):
+            for i in range(0, len(shard_samples), self.batch_size):
                 items = shard_samples[i:i + self.batch_size]
                 if self.strict_batch_size and len(items) < self.batch_size:
                     logger.debug('Extending batch to max size')
@@ -154,9 +154,9 @@ class ShardedDataIterator(object):
         #     batch = shard_samples[0:self.batch_size]
         #     yield batch
 
-        logger.debug('Finished iterating, iteration={}, shard={}'.format(self.iteration, self.shard_id))
+        # logger.debug('Finished iterating, iteration={}, shard={}'.format(self.iteration, self.shard_id))
         # reset the iteration status
-        self.iteration = 0
+        # self.iteration = 0
 
     def get_iteration(self) -> int:
         return self.iteration
