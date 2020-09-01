@@ -192,7 +192,7 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         num_other_negatives = args.other_negatives
         seed = args.seed
 
-        multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': 10}
+        multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': 20}
 
         # self.qqbiencoder.train()
         # self.aabiencoder.train()
