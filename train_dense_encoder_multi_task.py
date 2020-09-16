@@ -192,7 +192,8 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         num_other_negatives = args.other_negatives
         seed = args.seed
 
-        multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': 20}
+        # multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': 20} # semeval
+        multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': args.num_qa_examples_per_qqs_example} #askubuntu
 
         # self.qqbiencoder.train()
         # self.aabiencoder.train()
@@ -407,6 +408,9 @@ def main():
                         If the file is given, qa task will be trained")
     parser.add_argument("--qa_dev_file", default=None, type=str, help="If the file is given, qa task will be tested")
     parser.add_argument("--num_iterations_per_epoch", default=-1, type=int)
+
+    parser.add_argument('--num_qa_examples_per_qqs_example', default=3, type=int, help='semeval=20, askubuntu=3')
+
     args = parser.parse_args()
 
     #test
