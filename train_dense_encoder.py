@@ -169,7 +169,7 @@ class BiEncoderTrainer(object):
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
-                                                               num_hard_negatives, num_other_negatives, shuffle=False)
+                                                               5, num_other_negatives, shuffle=False)
 
             loss, correct_cnt = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, self.tensorizer, args)
             total_loss += loss.item()
@@ -225,6 +225,7 @@ class BiEncoderTrainer(object):
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
                                                                True,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
+            biencoder_input = BiEncoderBatch(**move_to_device(biencoder_input._asdict(), args.device))
             total_ctxs = len(ctx_represenations)
             ctxs_ids = biencoder_input.context_ids
             ctxs_segments = biencoder_input.ctx_segments
@@ -453,7 +454,6 @@ def _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, local_pos
         global_ctxs_vector = local_ctx_vectors
         positive_idx_per_question = local_positive_idxs
         hard_negatives_per_question = local_hard_negatives_idxs
-
     loss, is_correct = loss_function.calc(global_q_vector, global_ctxs_vector, positive_idx_per_question,
                                           hard_negatives_per_question)
 
@@ -466,7 +466,6 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
 
     q_attn_mask = tensorizer.get_attn_mask(input.question_ids)
     ctx_attn_mask = tensorizer.get_attn_mask(input.context_ids)
-
     if model.training:
         model_out = model(input.question_ids, input.question_segments, q_attn_mask, input.context_ids,
                           input.ctx_segments, ctx_attn_mask)
@@ -476,7 +475,6 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
                               input.ctx_segments, ctx_attn_mask)
 
     local_q_vector, local_ctx_vectors = model_out
-
     loss_function = BiEncoderNllLoss()
 
     loss, is_correct = _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, input.is_positive,
