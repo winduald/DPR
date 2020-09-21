@@ -309,6 +309,8 @@ class BiEncoderTrainer(object):
 
         # breakpoint()
         scores = sim_score_f(q_represenations, ctx_represenations)
+        print("number of scores in retrieval %d" %len(scores))
+        
         values, indices = torch.sort(scores, dim=1, descending=True)
 
         rank = 0
