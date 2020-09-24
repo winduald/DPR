@@ -18,6 +18,7 @@ from fairseq.optim.adam import FairseqAdam
 from torch import Tensor as T
 from torch import nn
 
+import torch
 from dpr.models.hf_models import get_roberta_tensorizer
 from .biencoder import BiEncoder
 
@@ -48,7 +49,7 @@ class RobertaEncoder(nn.Module):
 
     @classmethod
     def from_pretrained(cls, pretrained_dir_path: str):
-        model = FaiseqRobertaModel.from_pretrained(pretrained_dir_path)
+        model = roberta = torch.hub.load('pytorch/fairseq', 'roberta.base')
         return cls(model)
 
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T) -> Tuple[T, ...]:
