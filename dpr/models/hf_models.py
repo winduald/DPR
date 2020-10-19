@@ -43,7 +43,7 @@ def get_bert_triangle_components(args, inference_only: bool = False, **kwargs):
     qqbiencoder = BiEncoder(question_encoder, question_encoder)
     qabiencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
     aabiencoder = BiEncoder(ctx_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
-    
+
     #here Qa model contains all parameters
     optimizer = get_optimizer(qabiencoder,
                               learning_rate=args.learning_rate,
@@ -61,7 +61,7 @@ def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
         shared_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
                                                     projection_dim=args.projection_dim, dropout=dropout, **kwargs)
         question_encoder = shared_encoder
-        ctx_encoder = shared_encoder                                      
+        ctx_encoder = shared_encoder
     else:
         question_encoder = HFBertEncoder.init_encoder(args.pretrained_model_cfg,
                                                     projection_dim=args.projection_dim, dropout=dropout, **kwargs)
@@ -144,11 +144,14 @@ class HFBertEncoder(BertModel):
 
     @classmethod
     def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, **kwargs) -> BertModel:
-        cfg = BertConfig.from_pretrained(cfg_name if cfg_name else 'bert-base-uncased')
+        # cfg = BertConfig.from_pretrained(cfg_name if cfg_name else 'bert-base-uncased')
+        downloaded_path = '/mnt/vol/nlp_technologies/users/xiaojianwu/data/dpr/models/hugginface/bert'
+        cfg = BertConfig.from_pretrained(downloaded_path)
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
             cfg.hidden_dropout_prob = dropout
-        return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
+        # return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
+        return cls.from_pretrained(downloaded_path, config=cfg, project_dim=projection_dim, **kwargs)
 
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T) -> Tuple[T, ...]:
         if self.config.output_hidden_states:
