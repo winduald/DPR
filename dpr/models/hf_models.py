@@ -4,7 +4,6 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-
 """
 Encoder model wrappers based on HuggingFace code
 """
@@ -23,6 +22,8 @@ from transformers.tokenization_roberta import RobertaTokenizer
 from dpr.utils.data_utils import Tensorizer
 from .biencoder import BiEncoder
 from .reader import Reader
+
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +147,18 @@ class HFBertEncoder(BertModel):
     def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, **kwargs) -> BertModel:
         # cfg = BertConfig.from_pretrained(cfg_name if cfg_name else 'bert-base-uncased')
         downloaded_path = '/mnt/vol/nlp_technologies/users/xiaojianwu/data/dpr/models/hugginface/bert'
-        cfg = BertConfig.from_pretrained(downloaded_path)
+        if os.path.exists(downloaded_path):
+            cfg = BertConfig.from_pretrained(downloaded_path)
+        else:
+            cfg = BertConfig.from_pretrained(cfg_name)
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
             cfg.hidden_dropout_prob = dropout
         # return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
-        return cls.from_pretrained(downloaded_path, config=cfg, project_dim=projection_dim, **kwargs)
+        if os.path.exists(downloaded_path):
+            return cls.from_pretrained(downloaded_path, config=cfg, project_dim=projection_dim, **kwargs)
+        else:
+            return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
 
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T) -> Tuple[T, ...]:
         if self.config.output_hidden_states:
