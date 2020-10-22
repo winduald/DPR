@@ -72,8 +72,6 @@ def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
     fix_ctx_encoder = args.fix_ctx_encoder if hasattr(args, 'fix_ctx_encoder') else False
     biencoder = BiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
 
-    breakpoint()
-
     optimizer = get_optimizer(biencoder,
                               learning_rate=args.learning_rate,
                               adam_eps=args.adam_eps, weight_decay=args.weight_decay,

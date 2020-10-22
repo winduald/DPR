@@ -176,7 +176,7 @@ class BiEncoderTrainer(object):
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
             # breakpoint()
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
             loss, correct_cnt = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, self.tensorizer, args)
             total_loss += loss.item()
@@ -210,7 +210,7 @@ class BiEncoderTrainer(object):
         batches = 0
         total_map_score, total_num_questions = 0, 0
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
-            biencoder_input = BiEncoder.create_biencoder_input_keep_all_positive(samples_batch, self.tensorizer,True)
+            biencoder_input = BiEncoder.create_biencoder_input_keep_all_positive(samples_batch, self.tensorizer, args.use_title_in_ctx)
             map_score_sum, num_questions = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, \
                                                                     self.tensorizer, args , method='rerank_eval')
             total_map_score += map_score_sum
@@ -258,7 +258,7 @@ class BiEncoderTrainer(object):
                 break
 
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
             total_ctxs = len(ctx_represenations)
             ctxs_ids = biencoder_input.context_ids
@@ -355,7 +355,7 @@ class BiEncoderTrainer(object):
             data_iteration = train_data_iterator.get_iteration()
             random.seed(seed + epoch + data_iteration)
             biencoder_batch = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=True,
                                                                shuffle_positives=args.shuffle_positive_ctx
                                                                )

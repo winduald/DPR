@@ -232,7 +232,7 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
             data_iteration = train_data_iterator.get_iteration()
             random.seed(seed + epoch + data_iteration)
             biencoder_batch = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=True,
                                                                shuffle_positives=args.shuffle_positive_ctx
                                                                )
@@ -363,6 +363,11 @@ def main():
     parser.add_argument("--which_encoder_to_load", type=str, default='c', 
                         help='when the encoder is shared, which encoder to load from pretrained open domain QA model.\
                             there are only two options: q meaning question encoder, c meaning document encoder')
+    parser.add_argument("--use_title_in_ctx", action='store_true', help='whether title in the ctx is used')
+    parser.add_argument("--model_selection_task_name", type=str, default='qqs', help='which task to use for model selection.\
+                                                                                    choose can be qa, aas')
+    parser.add_argument("--model_selection_metric", type=str, default='avg_rank', help='options are: avg_rank, loss, map')
+    parser.add_argument("--train_or_test", type=str, default='test', help='options are: train, test')
 
     # input/output src params
     parser.add_argument("--output_dir", default=None, type=str,
@@ -434,21 +439,23 @@ def main():
     print_args(args)
     # breakpoint()
     #options: qa, qqs. aas
-    eval_task_name = 'qqs'
+    # eval_task_name = 'qqs'
 
     trainer = BiEncoderTrainerMultiTask(args)
-    if args.question_sim_train_file is not None or args.answer_sim_train_file is not None or args.qa_train_file is not None:
-        trainer.run_train(eval_task_name)
+    if args.train_or_test == 'train':
+        assert args.question_sim_train_file is not None or args.answer_sim_train_file is not None or args.qa_train_file is not None, 'training files are missing'
+        trainer.run_train(args.model_selection_task_name)
         print("evaluate using the last iteration")
-        trainer.validate_reranking_by_task(eval_task_name)
-        trainer.validate_average_rank_by_task(eval_task_name)
-    elif args.model_file and (args.question_sim_dev_file or args.answer_sim_dev_file or args.qa_dev_file):
-        logger.info("No train files are specified. Run 2 types of validation for specified model file")
-        trainer.validate_reranking_by_task(eval_task_name)
+        trainer.validate_reranking_by_task(args.model_selection_task_name)
+        trainer.validate_average_rank_by_task(args.model_selection_task_name)
+    elif args.train_or_test == 'test': 
+        assert args.model_file and (args.question_sim_dev_file or args.answer_sim_dev_file or args.qa_dev_file), 'test files are missing'
+        # logger.info("No train files are specified. Run 2 types of validation for specified model file")
+        trainer.validate_reranking_by_task(args.model_selection_task_name)
         # trainer.validate_nll_by_task(eval_task_name)
-        trainer.validate_average_rank_by_task(eval_task_name)
+        trainer.validate_average_rank_by_task(args.model_selection_task_name)
     else:
-        logger.warning("Neither train_file or (model_file & dev_file) parameters are specified. Nothing to do.")
+        raise NotImplementedError("train_or_test not set correctly")
 
 
 if __name__ == "__main__":

@@ -130,7 +130,7 @@ class BiEncoder(nn.Module):
 
             neg_ctxs = sample['negative_ctxs']
             hard_neg_ctxs = sample['hard_negative_ctxs']
-            question = normalize_question(sample['question'])
+            question = normalize_question(sample['question']) #why remove question mark?
 
             if shuffle:
                 random.shuffle(neg_ctxs)
@@ -139,7 +139,7 @@ class BiEncoder(nn.Module):
             neg_ctxs = neg_ctxs[0:num_other_negatives]
             hard_neg_ctxs = hard_neg_ctxs[0:num_hard_negatives]
 
-            all_ctxs = [positive_ctx] + neg_ctxs + hard_neg_ctxs
+            all_ctxs = [positive_ctx] + neg_ctxs + hard_neg_ctxs #some bugs?
             hard_negatives_start_idx = 1
             hard_negatives_end_idx = 1 + len(hard_neg_ctxs)
 
