@@ -13,6 +13,7 @@ import torch
 from typing import Tuple
 from torch import nn
 from torch import Tensor as T
+import copy
 
 from dpr.models import init_triangle_encoder_components
 from dpr.models.biencoder import BiEncoder
@@ -94,19 +95,30 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
             upsample_rates = eval(args.train_files_upsample_rates)
 
         qqs_train_iterator, aas_train_iterator, qa_train_iterator = None, None, None
+        #create learning schedule
+        self.multi_task_schedule = {'qqs': args.num_qqs_data_repetition, 
+                                    'aas': args.num_aas_data_repetition, 
+                                    'qa': args.num_qa_data_repetition} #askubuntu
+        max_iterations = 0
         if args.question_sim_train_file:
             qqs_train_iterator = self.get_data_iterator(args.question_sim_train_file, args.batch_size,
                                                     shuffle=True,
                                                     shuffle_seed=args.seed, offset=self.start_batch,
                                                     upsample_rates=upsample_rates)
-            logger.info("qqs: Total iterations qqs per epoch=%d", qqs_train_iterator.max_iterations)
+            logger.info("qqs: Total iterations per epoch=%d", qqs_train_iterator.max_iterations)
+            max_iterations += self.multi_task_schedule['qqs'] * qqs_train_iterator.max_iterations
+        else:
+            self.multi_task_schedule['qqs'] = 0
         
         if args.answer_sim_train_file:
             aas_train_iterator = self.get_data_iterator(args.answer_sim_train_file, args.batch_size,
                                                     shuffle=True,
                                                     shuffle_seed=args.seed, offset=self.start_batch,
                                                     upsample_rates=upsample_rates)
-            logger.info("aas: Total iterations qqs per epoch=%d", aas_train_iterator.max_iterations)
+            logger.info("aas: Total iterations per epoch=%d", aas_train_iterator.max_iterations)
+            max_iterations += self.multi_task_schedule['aas'] * aas_train_iterator.max_iterations
+        else:
+            self.multi_task_schedule['aas'] = 0
 
 
         if args.qa_train_file:
@@ -114,18 +126,30 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
                                                     shuffle=True,
                                                     shuffle_seed=args.seed, offset=self.start_batch,
                                                     upsample_rates=upsample_rates)
-            logger.info("qa: Total iterations qqs per epoch=%d", qa_train_iterator.max_iterations)
-        
-        if args.num_iterations_per_epoch < 0:    
-            if args.question_sim_train_file:
-                max_iterations = qqs_train_iterator.max_iterations
-            elif args.qa_train_file:
-                max_iterations = qa_train_iterator.max_iterations
-            else:
-                max_iterations = aas_train_iterator.max_iterations
+            logger.info("qa: Total iterations per epoch=%d", qa_train_iterator.max_iterations)
+            max_iterations += self.multi_task_schedule['qa'] * qa_train_iterator.max_iterations
         else:
-            max_iterations = args.num_iterations_per_epoch
-        print("max_iterations %d" %max_iterations)
+            self.multi_task_schedule['qa'] = 0
+
+        
+        # if qqs_train_iterator is not None:
+        #     max_iterations += self.multi_task_schedule['qqs'] * qqs_train_iterator.max_iterations
+        # if aas_train_iterator is not None:
+        #     max_iterations += self.multi_task_schedule['aas'] * aas_train_iterator.max_iterations
+        # if qa_train_iterator is not None:
+        #     max_iterations += self.multi_task_schedule['qa'] * qa_train_iterator.max_iterations
+        logger.info("estimated number of iterations is %d", max_iterations)
+
+        # if args.num_iterations_per_epoch < 0:    
+        #     if args.question_sim_train_file:
+        #         max_iterations = qqs_train_iterator.max_iterations
+        #     elif args.qa_train_file:
+        #         max_iterations = qa_train_iterator.max_iterations
+        #     else:
+        #         max_iterations = aas_train_iterator.max_iterations
+        # else:
+        #     max_iterations = args.num_iterations_per_epoch
+        # logger.info("max_iterations %d" %max_iterations)
 
         updates_per_epoch = max_iterations // args.gradient_accumulation_steps
         total_updates = max(updates_per_epoch * (args.num_train_epochs - self.start_epoch - 1), 0) + \
@@ -149,26 +173,71 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
 
         if args.local_rank in [-1, 0]:
             logger.info('Training finished. Best validation checkpoint %s', self.best_cp_name)
+            logger.info('Best validation results ', str(self.best_validation_result))
 
-    def get_batch_from_multi_tasks(self, multi_task_scheduler, epoch,
+    def get_batch_from_multi_tasks(self, epoch,
                     qqs_train_data_iterator: ShardedDataIterator,
                      aas_train_data_iterator: ShardedDataIterator,
                      qa_train_data_iterator: ShardedDataIterator,):
-        it = 0
-        qqs_batch_gen = qqs_train_data_iterator.iterate_data_rotate(epoch=epoch) if qqs_train_data_iterator else None
-        aas_batch_gen = aas_train_data_iterator.iterate_data_rotate(epoch=epoch) if aas_train_data_iterator else None
-        qa_batch_gen = qa_train_data_iterator.iterate_data_rotate(epoch=epoch) if qa_train_data_iterator else None
-        while True:
-            it += 1
-            if qqs_batch_gen:
-                for j in range(multi_task_scheduler['qqs']):
-                    yield next(qqs_batch_gen), 'qqs', qqs_train_data_iterator
-            if aas_batch_gen:
-                for j in range(multi_task_scheduler['aas']):
-                    yield next(aas_batch_gen), 'aas', aas_train_data_iterator
-            if qa_batch_gen:
-                for j in range(multi_task_scheduler['qa']):
-                    yield next(qa_batch_gen), 'qa', qa_train_data_iterator
+        # it = 0
+        # qqs_batch_gen = qqs_train_data_iterator.iterate_data_rotate(epoch=epoch) if qqs_train_data_iterator else None
+        # aas_batch_gen = aas_train_data_iterator.iterate_data_rotate(epoch=epoch) if aas_train_data_iterator else None
+        # qa_batch_gen = qa_train_data_iterator.iterate_data_rotate(epoch=epoch) if qa_train_data_iterator else None
+        # while True:
+        #     it += 1
+        #     if qqs_batch_gen:
+        #         for j in range(self.multi_task_scheduler['qqs']):
+        #             yield next(qqs_batch_gen), 'qqs', qqs_train_data_iterator
+        #     if aas_batch_gen:
+        #         for j in range(self.multi_task_scheduler['aas']):
+        #             yield next(self.aas_batch_gen), 'aas', aas_train_data_iterator
+        #     if qa_batch_gen:
+        #         for j in range(self.multi_task_scheduler['qa']):
+        #             yield next(qa_batch_gen), 'qa', qa_train_data_iterator
+
+        # it = 0
+        scheduling = copy.deepcopy(self.multi_task_schedule)
+        generator_map = {'qqs': qqs_train_data_iterator.iterate_data(epoch=epoch) if qqs_train_data_iterator else None, 
+                        'aas': aas_train_data_iterator.iterate_data(epoch=epoch) if aas_train_data_iterator else None, 
+                        'qa': qa_train_data_iterator.iterate_data(epoch=epoch) if qa_train_data_iterator else None}
+        iterator_map = {'qqs': qqs_train_data_iterator, 'aas': aas_train_data_iterator, 'qa': qa_train_data_iterator}
+
+        def get_next_item_for(task_name):
+            # a task reach to the end of generator and it is the last round, just return None.
+            # if reaching the endo of generator but not the last round, recreate a new generator
+            if scheduling[task_name] > 0:
+                next_item = next(generator_map[task_name], None)
+                if next_item is None:
+                    scheduling[task_name] -= 1 # restart
+                    if scheduling[task_name] > 0: # otherwise, reach to the last round
+                        generator_map[task_name] = iterator_map[task_name].iterate_data(epoch=epoch)
+                        next_item = next(generator_map[task_name], None)
+                        assert next_item is not None, "no data exists in this generator"
+                        return next_item, task_name, iterator_map[task_name]
+                    else:
+                        return None
+                else:
+                    return next_item, task_name, iterator_map[task_name]
+            else:
+                return None
+        all_queue_empty = False
+        it = 0        
+        # breakpoint()
+        while all_queue_empty != True:
+            all_queue_empty = True # if all queue return None, the loop ends
+            for tn in ['qqs', 'aas', 'qa']:
+                next_item = get_next_item_for(tn)
+                if next_item is not None:
+                    all_queue_empty = False
+                    # if it % 100 == 0:
+                    #     print(it)
+                    # breakpoint()
+                    it += 1
+                    yield next_item
+            
+            
+
+            
 
         
     # def zero_grad():
@@ -181,7 +250,7 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
                      qqs_train_data_iterator: ShardedDataIterator,
                      aas_train_data_iterator: ShardedDataIterator,
                      qa_train_data_iterator: ShardedDataIterator, 
-                     max_iterations,
+                     max_iterations: int, # this parameter will be re computed
                      eval_task_name: str):
         # breakpoint()
         args = self.args
@@ -193,7 +262,7 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         seed = args.seed
 
         # multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': 20} # semeval
-        multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': args.num_qa_examples_per_qqs_example} #askubuntu
+        # multi_task_schedule = {'qqs': 1, 'aas': 1, 'qa': args.num_qa_examples_per_qqs_example} #askubuntu
 
         # self.qqbiencoder.train()
         # self.aabiencoder.train()
@@ -201,13 +270,15 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
         self.triangle_encoder.train()
 
         # self.biencoder.train()
+        # to detmine the number of iterations for epoch
+
         epoch_batches = max_iterations
         data_iteration = 0
-        batch_gen = self.get_batch_from_multi_tasks(multi_task_schedule, epoch, 
+        batch_gen = self.get_batch_from_multi_tasks(epoch, 
                                                     qqs_train_data_iterator,
                                                     aas_train_data_iterator,
-                                                    qa_train_data_iterator,)
-        num_iteration_per_epoch = max_iterations #this may have isssue ?????
+                                                    qa_train_data_iterator)
+        # num_iteration_per_epoch = max_iterations #this may have isssue ?????
         #we will track three lossexs
         # qq_epoch_loss, aa_epoch_loss, qa_epoch_loss = 0, 0, 0
         # qq_epoch_correct_predictions, aa_epoch_correct_predictions, qa_epoch_correct_predictions = 0, 0, 0
@@ -222,9 +293,15 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
                         'qa': self.triangle_encoder.qabiencoder}
 
         # breakpoint()
-        for i in range(num_iteration_per_epoch):
-            samples_batch, task_name, train_data_iterator = next(batch_gen)
-        # for i, samples_batch in enumerate(train_data_iterator.iterate_data_rotate(epoch=epoch)):
+        # for i in range(num_iteration_per_epoch): # deprecate number of iterations
+        it = 0
+        next_batch = next(batch_gen, None)
+        while next_batch is not None:
+            samples_batch, task_name, train_data_iterator = next_batch
+            # next_batch = next(batch_gen, None)
+            # continue
+            # samples_batch, task_name, train_data_iterator = next(batch_gen)
+            # for i, samples_batch in enumerate(train_data_iterator.iterate_data_rotate(epoch=epoch)):
             # to be able to resume shuffled ctx- pools
             # data_iteration = train_data_iterator.get_iteration()
             # random.seed(seed + epoch + data_iteration)
@@ -254,17 +331,17 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
                     #clip biencoder
                     torch.nn.utils.clip_grad_norm_(self.triangle_encoder.parameters(), args.max_grad_norm)
 
-            if (i + 1) % args.gradient_accumulation_steps == 0:
+            if (it + 1) % args.gradient_accumulation_steps == 0:
                 #this update will consider all tasks. So, each task will accumulate gradients.
                 #here all accumulated gradients will be updated
                 self.optimizer.step()
                 scheduler.step()
                 self.triangle_encoder.zero_grad()
 
-            if i % log_result_step == 0:
+            if it % log_result_step == 0:
                 lr = self.optimizer.param_groups[0]['lr']
                 logger.info(
-                    'Epoch: %d: Step: %d/%d, task=%s, loss=%f, lr=%f', epoch, i, epoch_batches, task_name ,loss.item(), lr)
+                    'Epoch: %d: Step: %d/%d, task=%s, loss=%f, lr=%f', epoch, it, epoch_batches, task_name ,loss.item(), lr)
 
             #report average loss of all tasks
             if (iterations[task_name] + 1) % rolling_loss_step == 0:
@@ -282,6 +359,8 @@ class BiEncoderTrainerMultiTask(BiEncoderTrainer):
             #iteration add 1
             # breakpoint()
             iterations[task_name] += 1
+            it += 1
+            next_batch = next(batch_gen, None)
 
         self.validate_and_save_by_task(epoch, data_iteration, eval_task_name, scheduler)
         # breakpoint()
@@ -366,7 +445,7 @@ def main():
     parser.add_argument("--use_title_in_ctx", action='store_true', help='whether title in the ctx is used')
     parser.add_argument("--model_selection_task_name", type=str, default='qqs', help='which task to use for model selection.\
                                                                                     choose can be qa, aas')
-    parser.add_argument("--model_selection_metric", type=str, default='avg_rank', help='options are: avg_rank, loss, map')
+    # parser.add_argument("--model_selection_metric", type=str, default='avg_rank', help='options are: avg_rank, loss, map')
     parser.add_argument("--train_or_test", type=str, default='test', help='options are: train, test')
 
     # input/output src params
@@ -374,7 +453,7 @@ def main():
                         help="The output directory where the model checkpoints will be written or resumed from")
 
     # data handling parameters
-    parser.add_argument("--hard_negatives", default=1, type=int,
+    parser.add_argument("--hard_negatives", default=10, type=int,
                         help="amount of hard negative ctx per question")
     parser.add_argument("--other_negatives", default=0, type=int,
                         help="amount of 'other' negative ctx per question")
@@ -382,7 +461,7 @@ def main():
                         help="list of up-sample rates per each train file. Example: [1,2,1]")
 
     # parameters for Av.rank validation method
-    parser.add_argument("--val_av_rank_start_epoch", type=int, default=10000,
+    parser.add_argument("--val_av_rank_start_epoch", type=int, default=1,
                         help="Av.rank validation: the epoch from which to enable this validation")
     parser.add_argument("--val_av_rank_hard_neg", type=int, default=30,
                         help="Av.rank validation: how many hard negatives to take from each question pool")
@@ -412,9 +491,11 @@ def main():
     parser.add_argument("--qa_train_file", default=None, type=str, help="File pattern for the train set. \
                         If the file is given, qa task will be trained")
     parser.add_argument("--qa_dev_file", default=None, type=str, help="If the file is given, qa task will be tested")
-    parser.add_argument("--num_iterations_per_epoch", default=-1, type=int)
+    # parser.add_argument("--num_iterations_per_epoch", default=-1, type=int)
 
-    parser.add_argument('--num_qa_examples_per_qqs_example', default=3, type=int, help='semeval=20, askubuntu=3')
+    parser.add_argument('--num_qa_data_repetition', default=1, type=int, help='1')
+    parser.add_argument('--num_qqs_data_repetition', default=3, type=int, help='semeval=20, askubuntu=3')
+    parser.add_argument('--num_aas_data_repetition', default=0, type=int, help='not used')
 
     args = parser.parse_args()
 
@@ -441,11 +522,12 @@ def main():
     #options: qa, qqs. aas
     # eval_task_name = 'qqs'
 
+
     trainer = BiEncoderTrainerMultiTask(args)
     if args.train_or_test == 'train':
         assert args.question_sim_train_file is not None or args.answer_sim_train_file is not None or args.qa_train_file is not None, 'training files are missing'
         trainer.run_train(args.model_selection_task_name)
-        print("evaluate using the last iteration")
+        logger.info("evaluate using the last iteration")
         trainer.validate_reranking_by_task(args.model_selection_task_name)
         trainer.validate_average_rank_by_task(args.model_selection_task_name)
     elif args.train_or_test == 'test': 

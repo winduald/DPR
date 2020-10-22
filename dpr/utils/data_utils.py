@@ -103,7 +103,6 @@ class ShardedDataIterator(object):
             epoch_rnd.shuffle(self.data)
 
         # if resuming iteration somewhere in the middle of epoch, one needs to adjust max_iterations
-
         max_iterations = self.max_iterations - self.iteration
 
         shard_samples = self.data[self.shard_start_idx:self.shard_end_idx]
