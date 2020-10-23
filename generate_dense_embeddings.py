@@ -11,7 +11,7 @@
 """
 import os
 import pathlib
-
+import pandas as pd
 import argparse
 import csv
 import logging
@@ -74,7 +74,6 @@ def main(args):
     saved_state = load_states_from_checkpoint(args.model_file)
     set_encoder_params_from_state(saved_state.encoder_params, args)
     print_args(args)
-    
     tensorizer, encoder, _ = init_biencoder_components(args.encoder_model_type, args, inference_only=True)
 
     encoder = encoder.ctx_model
@@ -99,9 +98,9 @@ def main(args):
 
     rows = []
     with open(args.ctx_file) as tsvfile:
-        reader = csv.reader(tsvfile, delimiter='\t')
+        df = pd.read_csv(tsvfile,sep='\t',index_col=False)
         # file format: doc_id, doc_text, title
-        rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id'])
+        rows.extend([(row['id'], row['text'], row['title']) for idx, row in df.iterrows()])
 
     shard_size = int(len(rows) / args.num_shards)
     start_idx = args.shard_id * shard_size
@@ -115,8 +114,8 @@ def main(args):
     file = args.out_file + '_' + str(args.shard_id) + '.pkl'
     pathlib.Path(os.path.dirname(file)).mkdir(parents=True, exist_ok=True)
     logger.info('Writing results to %s' % file)
-    with open(file, mode='wb') as f:
-        pickle.dump(data, f)
+    res_df = pd.DataFrame(data, columns =['id', 'embed_dpr'])
+    res_df.to_csv(file)
 
     logger.info('Total passages processed %d. Written to %s', len(data), file)
 
@@ -140,5 +139,5 @@ if __name__ == '__main__':
 
     setup_args_gpu(args)
 
-    
+
     main(args)
