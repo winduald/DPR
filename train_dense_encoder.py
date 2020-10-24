@@ -168,7 +168,7 @@ class BiEncoderTrainer(object):
         batches = 0
         for i, samples_batch in enumerate(data_iterator.iterate_data()):
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                5, num_other_negatives, shuffle=False)
 
             loss, correct_cnt = _do_biencoder_fwd_pass(self.biencoder, biencoder_input, self.tensorizer, args)
@@ -223,7 +223,7 @@ class BiEncoderTrainer(object):
                 break
 
             biencoder_input = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=False)
             biencoder_input = BiEncoderBatch(**move_to_device(biencoder_input._asdict(), args.device))
             total_ctxs = len(ctx_represenations)
@@ -317,7 +317,7 @@ class BiEncoderTrainer(object):
             data_iteration = train_data_iterator.get_iteration()
             random.seed(seed + epoch + data_iteration)
             biencoder_batch = BiEncoder.create_biencoder_input(samples_batch, self.tensorizer,
-                                                               True,
+                                                               args.use_title_in_ctx,
                                                                num_hard_negatives, num_other_negatives, shuffle=True,
                                                                shuffle_positives=args.shuffle_positive_ctx
                                                                )
@@ -507,6 +507,7 @@ def main():
 
     parser.add_argument("--fix_ctx_encoder", action='store_true')
     parser.add_argument("--shuffle_positive_ctx", action='store_true')
+    parser.add_argument("--use_title_in_ctx", action='store_true', help='whether title in the ctx is used')
 
     # input/output src params
     parser.add_argument("--output_dir", default=None, type=str,
@@ -547,6 +548,12 @@ def main():
     print_args(args)
 
     trainer = BiEncoderTrainer(args)
+
+    if args.use_title_in_ctx is None:
+        args.use_title_in_ctx = False
+        logger.info("title in context disabled")
+    else:
+        logger.info("title in context enabled")
 
     if args.train_file is not None:
         trainer.run_train()

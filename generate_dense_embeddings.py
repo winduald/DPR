@@ -109,7 +109,7 @@ def main(args):
     logger.info('Producing encodings for passages range: %d to %d (out of total %d)', start_idx, end_idx, len(rows))
     rows = rows[start_idx:end_idx]
 
-    data = gen_ctx_vectors(rows, encoder, tensorizer, True)
+    data = gen_ctx_vectors(rows, encoder, tensorizer, args.use_title_in_ctx)
 
     file = args.out_file + '_' + str(args.shard_id) + '.pkl'
     pathlib.Path(os.path.dirname(file)).mkdir(parents=True, exist_ok=True)
@@ -133,7 +133,15 @@ if __name__ == '__main__':
     parser.add_argument('--shard_id', type=int, default=0, help="Number(0-based) of data shard to process")
     parser.add_argument('--num_shards', type=int, default=1, help="Total amount of data shards")
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for the passage encoder forward pass")
+    parser.add_argument("--use_title_in_ctx", action='store_true', help='whether title in the ctx is used')
+
     args = parser.parse_args()
+
+    if args.use_title_in_ctx is None:
+        args.use_title_in_ctx = False
+        logger.info("title in context disabled")
+    else:
+        logger.info("title in context enabled")
 
     assert args.model_file, 'Please specify --model_file checkpoint to init model weights'
 
